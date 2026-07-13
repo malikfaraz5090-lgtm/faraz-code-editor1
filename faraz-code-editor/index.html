@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1e1e1e">
+    <meta name="description" content="Faraz Code Editor - Professional mobile code editor">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Faraz Code Editor</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/editor/editor.main.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header id="header">
+            <div class="header-left">
+                <button id="menuBtn" class="icon-btn" title="Menu">☰</button>
+                <span id="currentFile">untitled.html</span>
+            </div>
+            <div class="header-right">
+                <button id="runBtn" class="icon-btn run-btn" title="Run">▶</button>
+                <button id="saveBtn" class="icon-btn" title="Save">💾</button>
+                <button id="settingsBtn" class="icon-btn" title="Settings">⚙</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div id="mainContainer">
+            <!-- Sidebar -->
+            <aside id="sidebar">
+                <div class="sidebar-header">
+                    <h3>Files</h3>
+                    <button id="newFileBtn" class="icon-btn-small" title="New File">+</button>
+                </div>
+                <div id="fileList">
+                    <!-- File list will be populated dynamically -->
+                </div>
+                <div class="sidebar-footer">
+                    <button id="importBtn" class="sidebar-btn">Import Files</button>
+                    <button id="exportBtn" class="sidebar-btn">Export Project</button>
+                </div>
+            </aside>
+
+            <!-- Editor Area -->
+            <div id="editorArea">
+                <div id="tabBar">
+                    <!-- Tabs will be populated dynamically -->
+                </div>
+                <div id="editor"></div>
+                <div id="preview" style="display: none;">
+                    <iframe id="previewFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+                    <button id="closePreview" class="close-preview-btn">✕</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <footer id="statusBar">
+            <span id="languageMode">HTML</span>
+            <span id="cursorPosition">Ln 1, Col 1</span>
+            <span id="fileSize">0 bytes</span>
+        </footer>
+
+        <!-- Settings Modal -->
+        <div id="settingsModal" class="modal">
+            <div class="modal-content">
+                <h2>Settings</h2>
+                <div class="setting-group">
+                    <label>Theme:</label>
+                    <select id="themeSelect">
+                        <option value="vs-dark">Dark</option>
+                        <option value="vs">Light</option>
+                        <option value="hc-black">High Contrast</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Font Size:</label>
+                    <input type="number" id="fontSize" min="10" max="30" value="14">
+                </div>
+                <div class="setting-group">
+                    <label>Tab Size:</label>
+                    <input type="number" id="tabSize" min="2" max="8" value="2">
+                </div>
+                <div class="setting-group">
+                    <label>Word Wrap:</label>
+                    <input type="checkbox" id="wordWrap" checked>
+                </div>
+                <div class="modal-actions">
+                    <button id="closeSettings" class="btn">Close</button>
+                    <button id="resetSettings" class="btn btn-secondary">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs/loader.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

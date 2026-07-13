@@ -1,0 +1,29 @@
+{
+  "name": "faraz-code-editor",
+  "version": "1.0.0",
+  "description": "Professional Android Code Editor with Monaco Editor",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve .",
+    "build": "npm run build:icons && npm run build:android",
+    "build:icons": "node scripts/generate-icons.js",
+    "build:android": "npx cap sync android && npx cap open android",
+    "pwa": "npx workbox generateSW workbox-config.js"
+  },
+  "keywords": [
+    "code-editor",
+    "android",
+    "monaco-editor",
+    "capacitor",
+    "pwa"
+  ],
+  "author": "Faraz",
+  "license": "MIT",
+  "devDependencies": {
+    "@capacitor/android": "^5.6.0",
+    "@capacitor/cli": "^5.6.0",
+    "@capacitor/core": "^5.6.0",
+    "serve": "^14.2.1",
+    "sharp": "^0.33.1"
+  }
+}
