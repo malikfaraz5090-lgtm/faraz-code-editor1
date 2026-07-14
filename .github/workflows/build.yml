@@ -1,0 +1,339 @@
+name: Build APK
+
+on: workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - uses: android-actions/setup-android@v3
+      
+      - name: Install Gradle
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip -q gradle-8.2-bin.zip
+          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
+          
+      - name: Create Android Project Structure
+        run: |
+          rm -rf android
+          mkdir -p android/app/src/main/java/com/faraz/codeeditor
+          mkdir -p android/app/src/main/res/values
+          mkdir -p android/app/src/main/res/drawable
+          mkdir -p android/app/src/main/assets/www
+          
+      - name: Create App Icon
+        run: |
+          cat > android/app/src/main/res/drawable/ic_launcher.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp" android:height="108dp"
+              android:viewportWidth="108" android:viewportHeight="108">
+              <path android:fillColor="#1e1e1e"
+                  android:pathData="M54,54m-54,0a54,54 0,1 1,108 0a54,54 0,1 1,-108 0"/>
+              <path android:strokeColor="#007acc" android:strokeWidth="6"
+                  android:fillColor="#00000000"
+                  android:pathData="M30,35 L20,54 L30,73 M78,35 L88,54 L78,73"/>
+              <path android:fillColor="#4ec9b0"
+                  android:pathData="M45,38 L55,38 L52,70 L42,70 Z"/>
+          </vector>
+          END
+          
+          echo "✅ App icon created"
+
+      - name: Create settings.gradle
+        run: |
+          cat > android/settings.gradle << 'END'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'FarazEditor'
+          include ':app'
+          END
+          
+      - name: Create root build.gradle
+        run: |
+          cat > android/build.gradle << 'END'
+          plugins {
+              id 'com.android.application' version '8.1.0' apply false
+          }
+          END
+          
+      - name: Create gradle.properties
+        run: |
+          cat > android/gradle.properties << 'END'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.enableJetifier=true
+          android.nonTransitiveRClass=true
+          END
+          
+      - name: Create app build.gradle
+        run: |
+          cat > android/app/build.gradle << 'END'
+          plugins {
+              id 'com.android.application'
+          }
+          
+          android {
+              namespace 'com.faraz.codeeditor'
+              compileSdk 33
+              
+              defaultConfig {
+                  applicationId 'com.faraz.codeeditor'
+                  minSdk 22
+                  targetSdk 33
+                  versionCode 1
+                  versionName '1.0.0'
+              }
+              
+              buildTypes {
+                  debug {
+                      debuggable true
+                      minifyEnabled false
+                  }
+                  release {
+                      minifyEnabled true
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+                  }
+              }
+              
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.10.0'
+          }
+          END
+          
+      - name: Create AndroidManifest.xml
+        run: |
+          cat > android/app/src/main/AndroidManifest.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              xmlns:tools="http://schemas.android.com/tools">
+              
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              
+              <application
+                  android:allowBackup="true"
+                  android:icon="@drawable/ic_launcher"
+                  android:label="Faraz Code Editor"
+                  android:roundIcon="@drawable/ic_launcher"
+                  android:supportsRtl="true"
+                  android:theme="@style/AppTheme"
+                  android:usesCleartextTraffic="true"
+                  android:hardwareAccelerated="true"
+                  android:largeHeap="true"
+                  tools:targetApi="33">
+                  
+                  <activity
+                      android:name=".MainActivity"
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+                      android:exported="true"
+                      android:label="Faraz Code Editor"
+                      android:theme="@style/AppTheme"
+                      android:windowSoftInputMode="adjustResize"
+                      android:launchMode="singleTask">
+                      
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          END
+          
+      - name: Create MainActivity.java
+        run: |
+          cat > android/app/src/main/java/com/faraz/codeeditor/MainActivity.java << 'END'
+          package com.faraz.codeeditor;
+          
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebSettings;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebChromeClient;
+          import androidx.appcompat.app.AppCompatActivity;
+          import android.view.KeyEvent;
+          import android.view.View;
+          
+          public class MainActivity extends AppCompatActivity {
+              
+              private WebView webView;
+              
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  
+                  webView = new WebView(this);
+                  
+                  WebSettings settings = webView.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+                  settings.setAllowContentAccess(true);
+                  settings.setDatabaseEnabled(true);
+                  settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+                  settings.setUseWideViewPort(true);
+                  settings.setLoadWithOverviewMode(true);
+                  settings.setSupportZoom(true);
+                  settings.setBuiltInZoomControls(true);
+                  settings.setDisplayZoomControls(false);
+                  settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                  settings.setRenderPriority(WebSettings.RenderPriority.HIGH);
+                  
+                  webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+                  
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.setWebChromeClient(new WebChromeClient());
+                  
+                  webView.loadUrl("file:///android_asset/www/index.html");
+                  setContentView(webView);
+              }
+              
+              @Override
+              public boolean onKeyDown(int keyCode, KeyEvent event) {
+                  if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
+                      webView.goBack();
+                      return true;
+                  }
+                  return super.onKeyDown(keyCode, event);
+              }
+              
+              @Override
+              protected void onResume() {
+                  super.onResume();
+                  webView.onResume();
+              }
+              
+              @Override
+              protected void onPause() {
+                  super.onPause();
+                  webView.onPause();
+              }
+              
+              @Override
+              protected void onDestroy() {
+                  if (webView != null) {
+                      webView.destroy();
+                  }
+                  super.onDestroy();
+              }
+          }
+          END
+          
+      - name: Create Resource Files
+        run: |
+          cat > android/app/src/main/res/values/styles.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+                  <item name="colorPrimary">#1e1e1e</item>
+                  <item name="colorPrimaryDark">#1a1a1a</item>
+                  <item name="colorAccent">#007acc</item>
+                  <item name="android:statusBarColor">#1e1e1e</item>
+                  <item name="android:navigationBarColor">#1e1e1e</item>
+                  <item name="android:windowBackground">#1e1e1e</item>
+              </style>
+          </resources>
+          END
+          
+          cat > android/app/src/main/res/values/strings.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Faraz Code Editor</string>
+          </resources>
+          END
+          
+          cat > android/app/src/main/res/values/colors.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="colorPrimary">#1e1e1e</color>
+              <color name="colorAccent">#007acc</color>
+          </resources>
+          END
+          
+      - name: Copy Web Files
+        run: |
+          echo "📁 Copying web files to assets..."
+          
+          if [ -f "index.html" ]; then
+              cp index.html android/app/src/main/assets/www/
+              echo "✅ index.html copied"
+          fi
+          
+          if [ -f "style.css" ]; then
+              cp style.css android/app/src/main/assets/www/
+              echo "✅ style.css copied"
+          fi
+          
+          if [ -f "app.js" ]; then
+              cp app.js android/app/src/main/assets/www/
+              echo "✅ app.js copied"
+          fi
+          
+          if [ -f "manifest.json" ]; then
+              cp manifest.json android/app/src/main/assets/www/
+              echo "✅ manifest.json copied"
+          fi
+          
+          if [ -f "service-worker.js" ]; then
+              cp service-worker.js android/app/src/main/assets/www/
+              echo "✅ service-worker.js copied"
+          fi
+          
+          if [ -d "assets" ]; then
+              cp -r assets android/app/src/main/assets/www/
+              echo "✅ assets/ copied"
+          fi
+          
+          echo "Files in assets/www:"
+          ls -la android/app/src/main/assets/www/
+          
+      - name: Build APK
+        run: |
+          cd android
+          gradle assembleDebug --no-daemon --stacktrace
+          
+      - name: Verify APK
+        run: |
+          echo "📱 Verifying APK..."
+          find android -name "*.apk" -type f -exec ls -lh {} \;
+          
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+              echo "✅ APK found!"
+              APK_SIZE=$(du -h android/app/build/outputs/apk/debug/app-debug.apk | cut -f1)
+              echo "📦 APK Size: $APK_SIZE"
+          fi
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Faraz-Code-Editor-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
