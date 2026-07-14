@@ -1,4 +1,98 @@
-// Monaco Editor Configuration
+// Paste Handler Optimization
+document.addEventListener('DOMContentLoaded', function() {
+    
+    // Optimize paste events
+    document.addEventListener('paste', function(e) {
+        e.preventDefault();
+        
+        // Get clipboard data
+        const clipboardData = e.clipboardData || window.clipboardData;
+        const pastedData = clipboardData.getData('text');
+        
+        if (pastedData && pastedData.length > 5000) {
+            // Large paste - show loading
+            showToast('Pasting large content...');
+            
+            // Use setTimeout to prevent UI freeze
+            setTimeout(() => {
+                if (editor) {
+                    const position = editor.getPosition();
+                    editor.executeEdits('paste', [{
+                        range: new monaco.Range(
+                            position.lineNumber,
+                            position.column,
+                            position.lineNumber,
+                            position.column
+                        ),
+                        text: pastedData
+                    }]);
+                    showToast('Content pasted successfully!');
+                }
+            }, 100);
+        } else if (editor) {
+            // Small paste - direct insert
+            const position = editor.getPosition();
+            editor.executeEdits('paste', [{
+                range: new monaco.Range(
+                    position.lineNumber,
+                    position.column,
+                    position.lineNumber,
+                    position.column
+                ),
+                text: pastedData
+            }]);
+        }
+    });
+    
+    // Toast notification function
+    function showToast(message) {
+        // Remove existing toast
+        const existingToast = document.querySelector('.toast-notification');
+        if (existingToast) {
+            existingToast.remove();
+        }
+        
+        // Create new toast
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #007acc;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 10000;
+            animation: fadeIn 0.3s, fadeOut 0.3s 1.7s;
+        `;
+        document.body.appendChild(toast);
+        
+        // Remove after 2 seconds
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 2000);
+    }
+    
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateX(-50%) translateY(0); }
+            to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+    `;
+    document.head.appendChild(style);
+});// Monaco Editor Configuration
 require.config({ 
     paths: { 
         vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' 
