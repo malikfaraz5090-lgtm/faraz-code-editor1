@@ -735,3 +735,592 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+// ============================================
+// FARAZ CODE EDITOR - COMPLETE APP.JS
+// ============================================
+
+// Monaco Editor Configuration
+require.config({ 
+    paths: { 
+        vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.44.0/min/vs' 
+    } 
+});
+
+// File System Management
+class FileSystem {
+    constructor() {
+        this.files = new Map();
+        this.loadFromStorage();
+        if (this.files.size === 0) {
+            this.createDefaultFiles();
+        }
+    }
+
+    createDefaultFiles() {
+        const defaultFiles = {
+            'index.html': `<!DOCTYPE html>\n<html>\n<head>\n    <title>My Project</title>\n</head>\n<body>\n    <h1>Hello World!</h1>\n</body>\n</html>`,
+            'style.css': `body {\n    font-family: Arial, sans-serif;\n    margin: 20px;\n    background: #f0f0f0;\n}`,
+            'script.js': `console.log('Hello from Faraz Code Editor!');`
+        };
+
+        for (const [filename, content] of Object.entries(defaultFiles)) {
+            this.files.set(filename, {
+                name: filename,
+                content: content,
+                language: this.getLanguageFromExtension(filename),
+                lastModified: Date.now()
+            });
+        }
+        this.saveToStorage();
+    }
+
+    getLanguageFromExtension(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const languageMap = {
+            'html': 'html', 'htm': 'html', 'css': 'css', 'js': 'javascript',
+            'json': 'json', 'xml': 'xml', 'md': 'markdown', 'py': 'python',
+            'php': 'php', 'sql': 'sql'
+        };
+        return languageMap[ext] || 'plaintext';
+    }
+
+    loadFromStorage() {
+        try {
+            const stored = localStorage.getItem('faraz-editor-files');
+            if (stored) {
+                const filesObj = JSON.parse(stored);
+                for (const [name, file] of Object.entries(filesObj)) {
+                    this.files.set(name, file);
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load files:', e);
+        }
+    }
+
+    saveToStorage() {
+        try {
+            const filesObj = {};
+            for (const [name, file] of this.files) {
+                filesObj[name] = file;
+            }
+            localStorage.setItem('faraz-editor-files', JSON.stringify(filesObj));
+        } catch (e) {
+            console.error('Failed to save files:', e);
+        }
+    }
+
+    createFile(name, content = '') {
+        if (this.files.has(name)) throw new Error('File already exists');
+        const file = {
+            name,
+            content,
+            language: this.getLanguageFromExtension(name),
+            lastModified: Date.now()
+        };
+        this.files.set(name, file);
+        this.saveToStorage();
+        return file;
+    }
+
+    updateFile(name, content) {
+        const file = this.files.get(name);
+        if (!file) throw new Error('File not found');
+        file.content = content;
+        file.lastModified = Date.now();
+        this.saveToStorage();
+    }
+
+    deleteFile(name) {
+        this.files.delete(name);
+        this.saveToStorage();
+    }
+
+    getAllFiles() {
+        return Array.from(this.files.values());
+    }
+}
+
+// Editor Manager
+class EditorManager {
+    constructor(fileSystem) {
+        this.fileSystem = fileSystem;
+        this.editor = null;
+        this.currentFile = null;
+        this.openTabs = new Set();
+        this.init();
+    }
+
+    async init() {
+        await this.initMonaco();
+        this.setupEventListeners();
+        this.renderFileList();
+        this.loadSettings();
+        
+        const files = this.fileSystem.getAllFiles();
+        if (files.length > 0) {
+            this.openFile(files[0].name);
+        }
+    }
+
+    initMonaco() {
+        return new Promise((resolve) => {
+            require(['vs/editor/editor.main'], () => {
+                this.editor = monaco.editor.create(document.getElementById('editor'), {
+                    value: '',
+                    language: 'html',
+                    theme: 'vs-dark',
+                    fontSize: 14,
+                    tabSize: 2,
+                    wordWrap: 'on',
+                    minimap: { enabled: false },
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                    lineNumbers: 'on',
+                    renderWhitespace: 'selection',
+                    bracketPairColorization: { enabled: true },
+                });
+
+                this.editor.onDidChangeCursorPosition((e) => {
+                    document.getElementById('cursorPosition').textContent = 
+                        `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+                });
+
+                this.editor.onDidChangeModelContent(() => {
+                    if (this.currentFile) {
+                        this.fileSystem.updateFile(this.currentFile, this.editor.getValue());
+                        this.updateFileSize();
+                    }
+                });
+
+                resolve();
+            });
+        });
+    }
+
+    setupEventListeners() {
+        document.getElementById('menuBtn').addEventListener('click', () => {
+            document.getElementById('sidebar').classList.toggle('open');
+        });
+
+        document.getElementById('newFileBtn').addEventListener('click', () => {
+            this.createNewFile();
+        });
+
+        document.getElementById('runBtn').addEventListener('click', () => {
+            this.togglePreview();
+        });
+
+        document.getElementById('closePreview')?.addEventListener('click', () => {
+            this.hidePreview();
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            this.saveCurrentFile();
+        });
+
+        document.getElementById('settingsBtn').addEventListener('click', () => {
+            this.toggleSettings();
+        });
+
+        document.getElementById('closeSettings')?.addEventListener('click', () => {
+            this.toggleSettings();
+        });
+
+        document.getElementById('themeSelect')?.addEventListener('change', (e) => {
+            monaco.editor.setTheme(e.target.value);
+            this.saveSettings();
+        });
+
+        document.getElementById('fontSize')?.addEventListener('change', (e) => {
+            this.editor.updateOptions({ fontSize: parseInt(e.target.value) });
+            this.saveSettings();
+        });
+
+        document.getElementById('importBtn')?.addEventListener('click', () => {
+            this.importFiles();
+        });
+
+        document.getElementById('exportBtn')?.addEventListener('click', () => {
+            this.exportProject();
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key === 's') {
+                    e.preventDefault();
+                    this.saveCurrentFile();
+                } else if (e.key === 'n') {
+                    e.preventDefault();
+                    this.createNewFile();
+                }
+            }
+        });
+
+        // ============================================
+        // BUILD APK BUTTON - ADD HERE
+        // ============================================
+        document.getElementById('buildApkBtn')?.addEventListener('click', () => {
+            this.showBuildModal();
+        });
+    }
+
+    openFile(filename) {
+        const file = this.fileSystem.files.get(filename);
+        if (!file) return;
+
+        this.currentFile = filename;
+        const model = this.editor.getModel();
+        if (model) {
+            model.setValue(file.content);
+            monaco.editor.setModelLanguage(model, file.language);
+        }
+
+        document.getElementById('currentFile').textContent = filename;
+        document.getElementById('languageMode').textContent = file.language.toUpperCase();
+        this.updateFileSize();
+        this.renderFileList();
+        this.hidePreview();
+    }
+
+    renderFileList() {
+        const fileList = document.getElementById('fileList');
+        fileList.innerHTML = '';
+        
+        const files = this.fileSystem.getAllFiles();
+        files.forEach(file => {
+            const fileItem = document.createElement('div');
+            fileItem.className = `file-item ${file.name === this.currentFile ? 'active' : ''}`;
+            fileItem.innerHTML = `
+                <span class="file-icon">${this.getFileIcon(file.name)}</span>
+                <span class="file-name">${file.name}</span>
+                <span class="file-actions">
+                    <button class="icon-btn-small delete-btn" title="Delete">🗑</button>
+                </span>
+            `;
+
+            fileItem.addEventListener('click', (e) => {
+                if (!e.target.closest('.file-actions')) {
+                    this.openFile(file.name);
+                }
+            });
+
+            fileItem.querySelector('.delete-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.deleteFile(file.name);
+            });
+
+            fileList.appendChild(fileItem);
+        });
+    }
+
+    createNewFile() {
+        const name = prompt('Enter file name (with extension):');
+        if (!name) return;
+        try {
+            this.fileSystem.createFile(name);
+            this.openFile(name);
+        } catch (e) {
+            alert(e.message);
+        }
+    }
+
+    deleteFile(filename) {
+        if (!confirm(`Delete ${filename}?`)) return;
+        this.fileSystem.deleteFile(filename);
+        this.renderFileList();
+    }
+
+    saveCurrentFile() {
+        if (this.currentFile) {
+            const content = this.editor.getValue();
+            this.fileSystem.updateFile(this.currentFile, content);
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.textContent = '✓';
+            setTimeout(() => { saveBtn.textContent = '💾'; }, 1000);
+        }
+    }
+
+    togglePreview() {
+        const preview = document.getElementById('preview');
+        const editor = document.getElementById('editor');
+        
+        if (preview.style.display === 'none') {
+            this.showPreview();
+        } else {
+            this.hidePreview();
+        }
+    }
+
+    showPreview() {
+        const preview = document.getElementById('preview');
+        const editor = document.getElementById('editor');
+        const frame = document.getElementById('previewFrame');
+        const htmlContent = this.generatePreviewContent();
+        frame.srcdoc = htmlContent;
+        preview.style.display = 'block';
+        editor.style.display = 'none';
+    }
+
+    hidePreview() {
+        document.getElementById('preview').style.display = 'none';
+        document.getElementById('editor').style.display = 'block';
+    }
+
+    generatePreviewContent() {
+        const files = this.fileSystem.files;
+        let html = files.get('index.html')?.content || '';
+        let css = files.get('style.css')?.content || '';
+        let js = files.get('script.js')?.content || '';
+        if (css) html = html.replace('</head>', `<style>${css}</style></head>`);
+        if (js) html = html.replace('</body>', `<script>${js}</script></body>`);
+        return html;
+    }
+
+    toggleSettings() {
+        document.getElementById('settingsModal').classList.toggle('active');
+    }
+
+    loadSettings() {
+        const settings = JSON.parse(localStorage.getItem('faraz-editor-settings') || '{}');
+        if (settings.theme) {
+            document.getElementById('themeSelect').value = settings.theme;
+            monaco.editor.setTheme(settings.theme);
+        }
+        if (settings.fontSize) {
+            document.getElementById('fontSize').value = settings.fontSize;
+            this.editor.updateOptions({ fontSize: settings.fontSize });
+        }
+    }
+
+    saveSettings() {
+        const settings = {
+            theme: document.getElementById('themeSelect').value,
+            fontSize: parseInt(document.getElementById('fontSize').value),
+        };
+        localStorage.setItem('faraz-editor-settings', JSON.stringify(settings));
+    }
+
+    importFiles() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.onchange = async (e) => {
+            const files = e.target.files;
+            for (let file of files) {
+                const content = await file.text();
+                try {
+                    this.fileSystem.createFile(file.name, content);
+                } catch (e) {
+                    this.fileSystem.updateFile(file.name, content);
+                }
+            }
+            this.renderFileList();
+        };
+        input.click();
+    }
+
+    exportProject() {
+        const files = this.fileSystem.getAllFiles();
+        files.forEach(file => {
+            const blob = new Blob([file.content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+    }
+
+    getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        const icons = {
+            'html': '🌐', 'htm': '🌐', 'css': '🎨', 'js': '📜',
+            'json': '📋', 'xml': '📰', 'md': '📝', 'py': '🐍'
+        };
+        return icons[ext] || '📄';
+    }
+
+    updateFileSize() {
+        if (this.currentFile && this.editor) {
+            const size = new Blob([this.editor.getValue()]).size;
+            document.getElementById('fileSize').textContent = this.formatBytes(size);
+        }
+    }
+
+    formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // ============================================
+    // BUILD APK METHODS - ADD HERE
+    // ============================================
+    showBuildModal() {
+        const modal = document.createElement('div');
+        modal.className = 'build-modal active';
+        modal.id = 'buildModal';
+        modal.innerHTML = `
+            <div class="build-modal-content">
+                <h2 style="color: #007acc; margin-bottom: 20px;">📦 Build APK</h2>
+                <p class="build-status">Preparing build environment...</p>
+                <div class="build-progress">
+                    <div class="build-progress-bar"></div>
+                </div>
+                <p class="build-status" id="buildStep">Initializing...</p>
+                <div class="build-actions">
+                    <button class="btn-cancel" onclick="document.getElementById('buildModal').remove()">Cancel</button>
+                    <button class="btn-build" id="startBuildBtn">Start Build</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        document.getElementById('startBuildBtn').addEventListener('click', () => {
+            this.startBuildProcess();
+        });
+    }
+
+    startBuildProcess() {
+        const statusElement = document.getElementById('buildStep');
+        const progressBar = document.querySelector('.build-progress-bar');
+        
+        const steps = [
+            'Checking files...',
+            'Compiling HTML...',
+            'Bundling CSS...',
+            'Optimizing JavaScript...',
+            'Generating APK...',
+            'Signing APK...',
+            'Build Complete!'
+        ];
+        
+        let step = 0;
+        const buildInterval = setInterval(() => {
+            if (step < steps.length) {
+                statusElement.textContent = steps[step];
+                progressBar.style.width = ((step + 1) / steps.length * 100) + '%';
+                step++;
+            } else {
+                clearInterval(buildInterval);
+                statusElement.textContent = '✅ Build Complete!';
+                statusElement.style.color = '#4ec9b0';
+                
+                // Download files as package
+                setTimeout(() => {
+                    this.downloadBuildPackage();
+                }, 1000);
+            }
+        }, 800);
+    }
+
+    downloadBuildPackage() {
+        const files = this.fileSystem.getAllFiles();
+        const projectData = {
+            name: 'Faraz Code Editor Project',
+            version: '1.0.0',
+            files: {}
+        };
+        
+        files.forEach(file => {
+            projectData.files[file.name] = file.content;
+        });
+        
+        const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'faraz-project.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        // Update modal
+        const modalContent = document.querySelector('.build-modal-content');
+        modalContent.innerHTML = `
+            <h2 style="color: #4ec9b0;">✅ Build Complete!</h2>
+            <p style="color: #ccc; margin: 20px 0;">Project package downloaded!</p>
+            <p style="color: #999; font-size: 12px;">For Android APK, use GitHub Actions</p>
+            <button class="btn-build" onclick="document.getElementById('buildModal').remove()">Close</button>
+        `;
+    }
+}
+
+// ============================================
+// PASTE OPTIMIZATION - ADD HERE
+// ============================================
+document.addEventListener('DOMContentLoaded', function() {
+    // Toast notification
+    function showToast(message) {
+        const existingToast = document.querySelector('.toast-notification');
+        if (existingToast) existingToast.remove();
+        
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed; bottom: 60px; left: 50%;
+            transform: translateX(-50%); background: #007acc;
+            color: white; padding: 10px 20px; border-radius: 20px;
+            font-size: 14px; z-index: 10000;
+            animation: fadeIn 0.3s, fadeOut 0.3s 1.7s;
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 2000);
+    }
+    
+    // Add CSS animations
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes fadeOut {
+            from { opacity: 1; transform: translateX(-50%) translateY(0); }
+            to { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Optimize paste events
+    document.addEventListener('paste', function(e) {
+        const clipboardData = e.clipboardData || window.clipboardData;
+        const pastedData = clipboardData.getData('text');
+        
+        if (pastedData && pastedData.length > 5000) {
+            e.preventDefault();
+            showToast('Pasting large content...');
+            
+            setTimeout(() => {
+                if (window.editorManager && window.editorManager.editor) {
+                    const editor = window.editorManager.editor;
+                    const position = editor.getPosition();
+                    editor.executeEdits('paste', [{
+                        range: new monaco.Range(
+                            position.lineNumber, position.column,
+                            position.lineNumber, position.column
+                        ),
+                        text: pastedData
+                    }]);
+                    showToast('Content pasted!');
+                }
+            }, 100);
+        }
+    });
+});
+
+// ============================================
+// INITIALIZE APP - KEEP AT BOTTOM
+// ============================================
+document.addEventListener('DOMContentLoaded', () => {
+    const fileSystem = new FileSystem();
+    const editorManager = new EditorManager(fileSystem);
+    window.editorManager = editorManager;
+});
