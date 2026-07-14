@@ -1,19 +1,14 @@
-name: Build APK
+name: Build APK v2
 
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
+on: workflow_dispatch
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
     steps:
       - uses: actions/checkout@v4
       
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -21,16 +16,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          api-level: 34
-          build-tools: 34.0.0
-          target: android-34
+          api-level: 33
+          build-tools: 33.0.2
           
-      - name: Install Gradle
+      - name: Install Gradle 8.2
         run: |
-          wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
-          unzip -q gradle-8.4-bin.zip
-          echo "$PWD/gradle-8.4/bin" >> $GITHUB_PATH
-          gradle --version
+          wget -q https://services.gradle.org/distributions/gradle-8.2-bin.zip
+          unzip -q gradle-8.2-bin.zip
+          echo "$PWD/gradle-8.2/bin" >> $GITHUB_PATH
           
       - name: Create Android Project
         run: |
@@ -39,275 +32,123 @@ jobs:
           mkdir -p android/app/src/main/res/values
           mkdir -p android/app/src/main/assets/www
           
-      - name: Create settings.gradle
-        run: |
-          cat > android/settings.gradle << 'EOF'
-pluginManagement {
-    repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
-    }
-}
-dependencyResolutionManagement {
-    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        mavenCentral()
-    }
-}
-rootProject.name = 'FarazEditor'
-include ':app'
-EOF
-
-      - name: Create root build.gradle
-        run: |
-          cat > android/build.gradle << 'EOF'
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.4'
-    }
-}
-EOF
-
-      - name: Create app build.gradle
-        run: |
-          cat > android/app/build.gradle << 'EOF'
-plugins {
-    id 'com.android.application'
-}
-
-android {
-    namespace 'com.faraz.codeeditor'
-    compileSdk 34
-    
-    defaultConfig {
-        applicationId 'com.faraz.codeeditor'
-        minSdk 22
-        targetSdk 34
-        versionCode 1
-        versionName '1.0.0'
-    }
-    
-    buildTypes {
-        debug {
-            debuggable true
-            minifyEnabled false
-        }
-        release {
-            minifyEnabled false
-        }
-    }
-    
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-    }
-}
-
-dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.10.0'
-}
-EOF
-
-      - name: Create gradle.properties
-        run: |
-          cat > android/gradle.properties << 'EOF'
-org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
-android.useAndroidX=true
-android.enableJetifier=true
-android.nonTransitiveRClass=true
-EOF
-
-      - name: Create AndroidManifest.xml
-        run: |
-          cat > android/app/src/main/AndroidManifest.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-    
-    <uses-permission android:name="android.permission.INTERNET" />
-    
-    <application
-        android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
-        android:label="Faraz Code Editor"
-        android:supportsRtl="true"
-        android:theme="@style/AppTheme"
-        android:usesCleartextTraffic="true"
-        tools:targetApi="34">
-        
-        <activity
-            android:name=".MainActivity"
-            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-            android:exported="true"
-            android:label="Faraz Code Editor"
-            android:theme="@style/AppTheme"
-            android:windowSoftInputMode="adjustResize">
-            
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-EOF
-
-      - name: Create MainActivity.java
-        run: |
-          cat > android/app/src/main/java/com/faraz/codeeditor/MainActivity.java << 'EOF'
-package com.faraz.codeeditor;
-
-import android.os.Bundle;
-import android.webkit.WebView;
-import android.webkit.WebSettings;
-import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
-import androidx.appcompat.app.AppCompatActivity;
-import android.view.KeyEvent;
-
-public class MainActivity extends AppCompatActivity {
-    
-    private WebView webView;
-    
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        
-        webView = new WebView(this);
-        
-        WebSettings settings = webView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
-        settings.setDatabaseEnabled(true);
-        settings.setUseWideViewPort(true);
-        settings.setLoadWithOverviewMode(true);
-        settings.setSupportZoom(true);
-        settings.setBuiltInZoomControls(true);
-        settings.setDisplayZoomControls(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-        
-        webView.loadUrl("file:///android_asset/www/index.html");
-        setContentView(webView);
-    }
-    
-    @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
-            webView.goBack();
-            return true;
-        }
-        return super.onKeyDown(keyCode, event);
-    }
-}
-EOF
-
-      - name: Create Resource Files
-        run: |
+          # settings.gradle
+          echo "rootProject.name = 'FarazEditor'" > android/settings.gradle
+          echo "include ':app'" >> android/settings.gradle
+          
+          # build.gradle
+          cat > android/build.gradle << 'END'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.0.2'
+              }
+          }
+          END
+          
+          # gradle.properties
+          echo "android.useAndroidX=true" > android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx2048m" >> android/gradle.properties
+          
+          # app/build.gradle
+          cat > android/app/build.gradle << 'END'
+          apply plugin: 'com.android.application'
+          android {
+              namespace 'com.faraz.codeeditor'
+              compileSdk 33
+              defaultConfig {
+                  applicationId 'com.faraz.codeeditor'
+                  minSdk 22
+                  targetSdk 33
+                  versionCode 1
+                  versionName '1.0'
+              }
+              buildTypes {
+                  debug { debuggable true }
+                  release { minifyEnabled false }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+          }
+          END
+          
+          # AndroidManifest.xml
+          cat > android/app/src/main/AndroidManifest.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application android:allowBackup="true" android:label="Faraz Editor"
+                  android:theme="@style/AppTheme" android:usesCleartextTraffic="true">
+                  <activity android:name=".MainActivity" android:exported="true"
+                      android:configChanges="orientation|keyboardHidden|screenSize|uiMode">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          END
+          
+          # MainActivity.java
+          cat > android/app/src/main/java/com/faraz/codeeditor/MainActivity.java << 'END'
+          package com.faraz.codeeditor;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebSettings;
+          import androidx.appcompat.app.AppCompatActivity;
+          public class MainActivity extends AppCompatActivity {
+              @Override
+              protected void onCreate(Bundle b) {
+                  super.onCreate(b);
+                  WebView wv = new WebView(this);
+                  WebSettings ws = wv.getSettings();
+                  ws.setJavaScriptEnabled(true);
+                  ws.setDomStorageEnabled(true);
+                  ws.setAllowFileAccess(true);
+                  wv.loadUrl("file:///android_asset/www/index.html");
+                  setContentView(wv);
+              }
+          }
+          END
+          
           # styles.xml
-          cat > android/app/src/main/res/values/styles.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="colorPrimary">#1e1e1e</item>
-        <item name="colorPrimaryDark">#1a1a1a</item>
-        <item name="colorAccent">#007acc</item>
-        <item name="android:statusBarColor">#1e1e1e</item>
-        <item name="android:navigationBarColor">#1e1e1e</item>
-        <item name="android:windowBackground">#1e1e1e</item>
-    </style>
-</resources>
-EOF
+          cat > android/app/src/main/res/values/styles.xml << 'END'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+                  <item name="android:statusBarColor">#1e1e1e</item>
+              </style>
+          </resources>
+          END
           
           # strings.xml
-          cat > android/app/src/main/res/values/strings.xml << 'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Faraz Code Editor</string>
-</resources>
-EOF
-
-      - name: Copy Web Files
-        run: |
-          echo "Copying web files..."
+          echo '<?xml version="1.0" encoding="utf-8"?>' > android/app/src/main/res/values/strings.xml
+          echo '<resources>' >> android/app/src/main/res/values/strings.xml
+          echo '    <string name="app_name">Faraz Code Editor</string>' >> android/app/src/main/res/values/strings.xml
+          echo '</resources>' >> android/app/src/main/res/values/strings.xml
           
-          # Check if files exist, if not create defaults
-          if [ -f "index.html" ]; then
-            cp index.html android/app/src/main/assets/www/
-            echo "✅ index.html copied"
-          else
-            cat > android/app/src/main/assets/www/index.html << 'EOF'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faraz Code Editor</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #1e1e1e;
-            color: #fff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container { text-align: center; }
-        h1 { color: #007acc; font-size: 32px; }
-        p { color: #999; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>&lt;/&gt; Faraz Code Editor</h1>
-        <p>Professional Mobile Code Editor</p>
-    </div>
-</body>
-</html>
-EOF
-            echo "✅ default index.html created"
-          fi
+          # Create index.html
+          cat > android/app/src/main/assets/www/index.html << 'END'
+          <!DOCTYPE html>
+          <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Faraz Editor</title><style>body{font-family:Arial;background:#1e1e1e;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}h1{color:#007acc}</style></head><body><h1>Faraz Code Editor</h1></body></html>
+          END
           
-          # Copy other files
-          [ -f "style.css" ] && cp style.css android/app/src/main/assets/www/ && echo "✅ style.css"
-          [ -f "app.js" ] && cp app.js android/app/src/main/assets/www/ && echo "✅ app.js"
-          [ -f "manifest.json" ] && cp manifest.json android/app/src/main/assets/www/ && echo "✅ manifest.json"
-
       - name: Build APK
         run: |
           cd android
-          echo "Starting build..."
-          gradle clean assembleDebug --no-daemon --stacktrace --warning-mode all
-          
-      - name: Check APK
-        run: |
-          echo "Searching for APK..."
-          find android -name "*.apk" -type f -exec ls -lh {} \;
-          
-          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            echo "✅ APK found!"
-          else
-            echo "❌ APK not found at expected location"
-            find android -name "*.apk" -type f
-          fi
+          gradle assembleDebug --no-daemon --stacktrace
           
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Faraz-Code-Editor
-          path: |
-            android/app/build/outputs/apk/**/*.apk
-          retention-days: 30
+          name: FarazEditor-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
