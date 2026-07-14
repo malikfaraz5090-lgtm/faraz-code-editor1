@@ -3,18 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Build Type'
-        required: true
-        default: 'debug'
-        type: choice
-        options:
-          - debug
-          - release
 
 jobs:
   build:
@@ -36,185 +25,180 @@ jobs:
         with:
           api-level: 34
           build-tools: 34.0.0
-          target: default
+          target: android-34
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      - name: Install Capacitor CLI
+      - name: Install Capacitor
         run: |
-          npm install -g @capacitor/cli @capacitor/core
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          npm install -g @capacitor/cli
 
       - name: Create Web Directory
         run: |
-          echo "📁 Creating www directory..."
+          echo "Creating www directory..."
           mkdir -p www
           
-          # Copy all web files
-          cp index.html www/
-          cp style.css www/
-          cp app.js www/
-          cp manifest.json www/
-          cp service-worker.js www/
+          # Copy web files
+          for file in index.html style.css app.js manifest.json service-worker.js capacitor.config.json; do
+            if [ -f "$file" ]; then
+              cp "$file" www/
+              echo "Copied: $file"
+            else
+              echo "Warning: $file not found"
+            fi
+          done
           
           # Copy assets if exists
           if [ -d "assets" ]; then
             cp -r assets www/
+            echo "Copied: assets/"
           fi
           
-          # Copy capacitor config
-          cp capacitor.config.json www/
-          
-          echo "✅ Web directory created"
+          echo "www directory contents:"
           ls -la www/
 
       - name: Initialize Capacitor Android
         run: |
-          echo "📱 Initializing Capacitor Android project..."
+          echo "Initializing Capacitor..."
           
-          # Create capacitor.config.json if not exists
+          # Make sure capacitor.config.json exists
           if [ ! -f "capacitor.config.json" ]; then
-            echo '{
-              "appId": "com.faraz.codeeditor",
-              "appName": "Faraz Code Editor",
-              "webDir": "www",
-              "bundledWebRuntime": false
-            }' > capacitor.config.json
+            cat > capacitor.config.json << 'EOF'
+{
+  "appId": "com.faraz.codeeditor",
+  "appName": "Faraz Code Editor",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
+EOF
           fi
           
-          # Initialize Capacitor
+          # Initialize capacitor
           npx cap init "Faraz Code Editor" "com.faraz.codeeditor" --web-dir=www
+          
+          # Add Android platform
           npx cap add android
           
-          echo "✅ Capacitor initialized"
+          echo "Capacitor initialized successfully"
 
-      - name: Make Gradlew Executable
+      - name: Setup Gradle Wrapper
         run: |
           cd android
-          chmod +x gradlew
-          echo "✅ Gradlew is executable"
+          
+          # Create gradle wrapper directory if not exists
+          mkdir -p gradle/wrapper
+          
+          # Check if gradle-wrapper.jar exists
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            echo "Downloading gradle-wrapper.jar..."
+            curl -L -o gradle/wrapper/gradle-wrapper.jar \
+              https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar
+          fi
+          
+          # Make gradlew executable
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+          fi
+          
+          # Check gradle-wrapper.properties
+          if [ ! -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+            cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+networkTimeout=10000
+validateDistributionUrl=true
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+EOF
+          fi
+          
+          echo "Gradle wrapper setup complete"
+          ls -la gradle/wrapper/
+
+      - name: Fix Android Build Issues
+        run: |
+          cd android
+          
+          # Update gradle.properties
+          cat >> gradle.properties << 'EOF'
+android.useAndroidX=true
+android.enableJetifier=true
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+EOF
+          
+          # Check if variables.gradle exists
+          if [ ! -f "variables.gradle" ]; then
+            cat > variables.gradle << 'EOF'
+ext {
+    minSdkVersion = 22
+    compileSdkVersion = 34
+    targetSdkVersion = 34
+    androidxActivityVersion = '1.7.0'
+    androidxAppCompatVersion = '1.6.1'
+    androidxCoordinatorLayoutVersion = '1.2.0'
+    androidxCoreVersion = '1.10.0'
+    androidxFragmentVersion = '1.5.6'
+    coreSplashScreenVersion = '1.0.0'
+    androidxWebkitVersion = '1.6.1'
+    junitVersion = '4.13.2'
+    androidxJunitVersion = '1.1.5'
+    androidxEspressoCoreVersion = '3.5.1'
+    cordovaAndroidVersion = '10.1.1'
+}
+EOF
+          fi
+          
+          echo "Android build fixes applied"
 
       - name: Build Debug APK
-        if: github.event.inputs.build_type == 'debug' || github.event_name == 'push'
         run: |
-          echo "🔨 Building Debug APK..."
-          cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
-          echo "✅ Debug APK build complete"
-
-      - name: Build Release APK
-        if: github.event.inputs.build_type == 'release'
-        run: |
-          echo "🔨 Building Release APK..."
+          echo "Starting APK build..."
           cd android
           
-          # Generate keystore for release
-          keytool -genkey -v \
-            -keystore app/release.keystore \
-            -alias faraz \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass android123 \
-            -keypass android123 \
-            -dname "CN=Faraz, OU=Dev, O=Faraz Editor, L=City, S=State, C=IN"
+          # Clean first
+          ./gradlew clean --no-daemon || true
           
-          ./gradlew assembleRelease --no-daemon --stacktrace
-          echo "✅ Release APK build complete"
+          # Build
+          ./gradlew assembleDebug --no-daemon --stacktrace --info
+          
+          echo "Build complete"
 
-      - name: Find APK Files
-        id: find_apk
+      - name: Check APK
         run: |
-          echo "🔍 Finding APK files..."
-          
-          # Find all APKs
+          echo "Checking for APK files..."
           find android -name "*.apk" -type f
           
-          # Debug APK
-          DEBUG_APK=$(find android/app/build/outputs -name "*-debug.apk" -type f | head -n 1)
-          if [ -n "$DEBUG_APK" ]; then
-            echo "debug_apk=$DEBUG_APK" >> $GITHUB_OUTPUT
-            echo "✅ Found Debug APK: $DEBUG_APK"
-          fi
-          
-          # Release APK
-          RELEASE_APK=$(find android/app/build/outputs -name "*-release.apk" -type f | head -n 1)
-          if [ -n "$RELEASE_APK" ]; then
-            echo "release_apk=$RELEASE_APK" >> $GITHUB_OUTPUT
-            echo "✅ Found Release APK: $RELEASE_APK"
+          APK_PATH=$(find android/app/build/outputs -name "*.apk" -type f | head -n 1)
+          if [ -n "$APK_PATH" ]; then
+            echo "APK found: $APK_PATH"
+            echo "APK size: $(du -h $APK_PATH | cut -f1)"
+          else
+            echo "ERROR: No APK found!"
+            echo "Build output contents:"
+            ls -R android/app/build/outputs/ || true
+            exit 1
           fi
 
-      - name: Upload Debug APK
-        if: steps.find_apk.outputs.debug_apk != ''
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Faraz-Code-Editor-Debug
-          path: ${{ steps.find_apk.outputs.debug_apk }}
+          name: Faraz-Code-Editor-APK
+          path: android/app/build/outputs/apk/**/*.apk
           retention-days: 30
-
-      - name: Upload Release APK
-        if: steps.find_apk.outputs.release_apk != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: Faraz-Code-Editor-Release
-          path: ${{ steps.find_apk.outputs.release_apk }}
-          retention-days: 30
-
-      - name: Create GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ steps.find_apk.outputs.debug_apk }}
-          tag_name: v1.0.${{ github.run_number }}
-          name: Faraz Code Editor v1.0.${{ github.run_number }}
-          body: |
-            # 🚀 Faraz Code Editor - Android Build
-            
-            ## 📱 Build Information
-            - **Build Number:** #${{ github.run_number }}
-            - **Build Type:** Debug
-            - **Commit SHA:** ${{ github.sha }}
-            - **Build Date:** $(date +"%Y-%m-%d %H:%M:%S")
-            - **Branch:** ${{ github.ref_name }}
-            
-            ## ✨ Features Included
-            - Monaco Editor (VS Code-like experience)
-            - HTML/CSS/JavaScript Live Preview
-            - File Management System
-            - PWA Support
-            - Dark & Light Themes
-            - Import/Export Files
-            
-            ## 📥 Installation Steps
-            1. Download the APK file below ⬇️
-            2. On your Android device, go to **Settings > Security**
-            3. Enable **"Install from Unknown Sources"**
-            4. Open the downloaded APK file
-            5. Tap **Install**
-            6. Start coding! 🎉
-            
-            ## 🔧 Technical Details
-            - **Min SDK:** 22 (Android 5.1)
-            - **Target SDK:** 34 (Android 14)
-            - **Architecture:** Universal (ARM + x86)
-            - **Size:** $(ls -lh ${{ steps.find_apk.outputs.debug_apk }} | awk '{print $5}')
-            
-            ---
-            *Built with ❤️ using GitHub Actions*
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Summary
         run: |
           echo "==================================="
-          echo "🎉 Build Complete!"
+          echo "🎉 BUILD SUCCESSFUL!"
           echo "==================================="
-          echo "📱 APK Location: ${{ steps.find_apk.outputs.debug_apk }}"
-          echo "📦 Artifacts: Check the Artifacts section"
-          echo "📥 Download: Go to Actions > This Run > Artifacts"
+          echo "📱 Download APK from Artifacts section"
           echo "==================================="
