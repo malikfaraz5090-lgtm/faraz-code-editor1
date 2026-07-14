@@ -1,7 +1,7 @@
 {
   "appId": "com.faraz.codeeditor",
   "appName": "Faraz Code Editor",
-  "webDir": ".",
+  "webDir": "www",
   "bundledWebRuntime": false,
   "server": {
     "androidScheme": "https",
