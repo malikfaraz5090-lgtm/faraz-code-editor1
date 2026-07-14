@@ -45,8 +45,6 @@ jobs:
                   android:pathData="M45,38 L55,38 L52,70 L42,70 Z"/>
           </vector>
           END
-          
-          echo "✅ App icon created"
 
       - name: Create settings.gradle
         run: |
@@ -73,7 +71,7 @@ jobs:
         run: |
           cat > android/build.gradle << 'END'
           plugins {
-              id 'com.android.application' version '8.1.0' apply false
+              id 'com.android.application' version '8.2.0' apply false
           }
           END
           
@@ -95,12 +93,12 @@ jobs:
           
           android {
               namespace 'com.faraz.codeeditor'
-              compileSdk 33
+              compileSdk 34
               
               defaultConfig {
                   applicationId 'com.faraz.codeeditor'
                   minSdk 22
-                  targetSdk 33
+                  targetSdk 34
                   versionCode 1
                   versionName '1.0.0'
               }
@@ -148,7 +146,7 @@ jobs:
                   android:usesCleartextTraffic="true"
                   android:hardwareAccelerated="true"
                   android:largeHeap="true"
-                  tools:targetApi="33">
+                  tools:targetApi="34">
                   
                   <activity
                       android:name=".MainActivity"
@@ -270,46 +268,46 @@ jobs:
           </resources>
           END
           
-          cat > android/app/src/main/res/values/colors.xml << 'END'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <color name="colorPrimary">#1e1e1e</color>
-              <color name="colorAccent">#007acc</color>
-          </resources>
-          END
-          
       - name: Copy Web Files
         run: |
-          echo "📁 Copying web files to assets..."
+          echo "📁 Copying web files..."
           
-          if [ -f "index.html" ]; then
-              cp index.html android/app/src/main/assets/www/
-              echo "✅ index.html copied"
-          fi
+          # Copy files if they exist
+          for file in index.html style.css app.js manifest.json service-worker.js; do
+              if [ -f "$file" ]; then
+                  cp "$file" android/app/src/main/assets/www/
+                  echo "✅ Copied: $file"
+              else
+                  echo "⚠️ Not found: $file"
+              fi
+          done
           
-          if [ -f "style.css" ]; then
-              cp style.css android/app/src/main/assets/www/
-              echo "✅ style.css copied"
-          fi
-          
-          if [ -f "app.js" ]; then
-              cp app.js android/app/src/main/assets/www/
-              echo "✅ app.js copied"
-          fi
-          
-          if [ -f "manifest.json" ]; then
-              cp manifest.json android/app/src/main/assets/www/
-              echo "✅ manifest.json copied"
-          fi
-          
-          if [ -f "service-worker.js" ]; then
-              cp service-worker.js android/app/src/main/assets/www/
-              echo "✅ service-worker.js copied"
-          fi
-          
+          # Copy assets folder
           if [ -d "assets" ]; then
               cp -r assets android/app/src/main/assets/www/
-              echo "✅ assets/ copied"
+              echo "✅ Copied: assets/"
+          fi
+          
+          # Create default index.html if missing
+          if [ ! -f "android/app/src/main/assets/www/index.html" ]; then
+              cat > android/app/src/main/assets/www/index.html << 'END'
+          <!DOCTYPE html>
+          <html>
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>Faraz Code Editor</title>
+              <style>
+                  body { font-family: Arial; background: #1e1e1e; color: #fff; 
+                         display: flex; justify-content: center; align-items: center; 
+                         height: 100vh; margin: 0; }
+                  h1 { color: #007acc; }
+              </style>
+          </head>
+          <body><h1>🚀 Faraz Code Editor</h1></body>
+          </html>
+          END
+              echo "✅ Created default index.html"
           fi
           
           echo "Files in assets/www:"
@@ -322,13 +320,14 @@ jobs:
           
       - name: Verify APK
         run: |
-          echo "📱 Verifying APK..."
+          echo "📱 Checking APK..."
           find android -name "*.apk" -type f -exec ls -lh {} \;
           
           if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-              echo "✅ APK found!"
-              APK_SIZE=$(du -h android/app/build/outputs/apk/debug/app-debug.apk | cut -f1)
-              echo "📦 APK Size: $APK_SIZE"
+              echo "✅ APK generated successfully!"
+          else
+              echo "❌ APK not found"
+              exit 1
           fi
           
       - name: Upload APK
