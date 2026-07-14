@@ -31,25 +31,26 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-        
-       - name: Install Capacitor
-  run: |
-    npm install @capacitor/core @capacitor/cli @capacitor/android
-          - name: Prepare Web Files
-            run: |
-             mkdir -p www
-             cp index.html www/
-             cp style.css www/
-             cp app.js www/
-             cp manifest.json www/
 
-             if [ -f service-worker.js ]; then
-             cp service-worker.js www/
-             fi
+      - name: Install Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/cli @capacitor/android
 
-            if [ -d assets ]; then
+      - name: Prepare Web Files
+        run: |
+          mkdir -p www
+          cp index.html www/
+          cp style.css www/
+          cp app.js www/
+          cp manifest.json www/
+
+          if [ -f service-worker.js ]; then
+            cp service-worker.js www/
+          fi
+
+          if [ -d assets ]; then
             cp -r assets www/
-           fi
+          fi
 
       - name: Sync Capacitor
         run: npx cap sync android
