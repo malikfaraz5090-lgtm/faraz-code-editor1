@@ -1,0 +1,220 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build:
+    name: Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          api-level: 34
+          build-tools: 34.0.0
+          target: default
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install Capacitor CLI
+        run: |
+          npm install -g @capacitor/cli @capacitor/core
+
+      - name: Create Web Directory
+        run: |
+          echo "📁 Creating www directory..."
+          mkdir -p www
+          
+          # Copy all web files
+          cp index.html www/
+          cp style.css www/
+          cp app.js www/
+          cp manifest.json www/
+          cp service-worker.js www/
+          
+          # Copy assets if exists
+          if [ -d "assets" ]; then
+            cp -r assets www/
+          fi
+          
+          # Copy capacitor config
+          cp capacitor.config.json www/
+          
+          echo "✅ Web directory created"
+          ls -la www/
+
+      - name: Initialize Capacitor Android
+        run: |
+          echo "📱 Initializing Capacitor Android project..."
+          
+          # Create capacitor.config.json if not exists
+          if [ ! -f "capacitor.config.json" ]; then
+            echo '{
+              "appId": "com.faraz.codeeditor",
+              "appName": "Faraz Code Editor",
+              "webDir": "www",
+              "bundledWebRuntime": false
+            }' > capacitor.config.json
+          fi
+          
+          # Initialize Capacitor
+          npx cap init "Faraz Code Editor" "com.faraz.codeeditor" --web-dir=www
+          npx cap add android
+          
+          echo "✅ Capacitor initialized"
+
+      - name: Make Gradlew Executable
+        run: |
+          cd android
+          chmod +x gradlew
+          echo "✅ Gradlew is executable"
+
+      - name: Build Debug APK
+        if: github.event.inputs.build_type == 'debug' || github.event_name == 'push'
+        run: |
+          echo "🔨 Building Debug APK..."
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          echo "✅ Debug APK build complete"
+
+      - name: Build Release APK
+        if: github.event.inputs.build_type == 'release'
+        run: |
+          echo "🔨 Building Release APK..."
+          cd android
+          
+          # Generate keystore for release
+          keytool -genkey -v \
+            -keystore app/release.keystore \
+            -alias faraz \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android123 \
+            -keypass android123 \
+            -dname "CN=Faraz, OU=Dev, O=Faraz Editor, L=City, S=State, C=IN"
+          
+          ./gradlew assembleRelease --no-daemon --stacktrace
+          echo "✅ Release APK build complete"
+
+      - name: Find APK Files
+        id: find_apk
+        run: |
+          echo "🔍 Finding APK files..."
+          
+          # Find all APKs
+          find android -name "*.apk" -type f
+          
+          # Debug APK
+          DEBUG_APK=$(find android/app/build/outputs -name "*-debug.apk" -type f | head -n 1)
+          if [ -n "$DEBUG_APK" ]; then
+            echo "debug_apk=$DEBUG_APK" >> $GITHUB_OUTPUT
+            echo "✅ Found Debug APK: $DEBUG_APK"
+          fi
+          
+          # Release APK
+          RELEASE_APK=$(find android/app/build/outputs -name "*-release.apk" -type f | head -n 1)
+          if [ -n "$RELEASE_APK" ]; then
+            echo "release_apk=$RELEASE_APK" >> $GITHUB_OUTPUT
+            echo "✅ Found Release APK: $RELEASE_APK"
+          fi
+
+      - name: Upload Debug APK
+        if: steps.find_apk.outputs.debug_apk != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Faraz-Code-Editor-Debug
+          path: ${{ steps.find_apk.outputs.debug_apk }}
+          retention-days: 30
+
+      - name: Upload Release APK
+        if: steps.find_apk.outputs.release_apk != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Faraz-Code-Editor-Release
+          path: ${{ steps.find_apk.outputs.release_apk }}
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.find_apk.outputs.debug_apk }}
+          tag_name: v1.0.${{ github.run_number }}
+          name: Faraz Code Editor v1.0.${{ github.run_number }}
+          body: |
+            # 🚀 Faraz Code Editor - Android Build
+            
+            ## 📱 Build Information
+            - **Build Number:** #${{ github.run_number }}
+            - **Build Type:** Debug
+            - **Commit SHA:** ${{ github.sha }}
+            - **Build Date:** $(date +"%Y-%m-%d %H:%M:%S")
+            - **Branch:** ${{ github.ref_name }}
+            
+            ## ✨ Features Included
+            - Monaco Editor (VS Code-like experience)
+            - HTML/CSS/JavaScript Live Preview
+            - File Management System
+            - PWA Support
+            - Dark & Light Themes
+            - Import/Export Files
+            
+            ## 📥 Installation Steps
+            1. Download the APK file below ⬇️
+            2. On your Android device, go to **Settings > Security**
+            3. Enable **"Install from Unknown Sources"**
+            4. Open the downloaded APK file
+            5. Tap **Install**
+            6. Start coding! 🎉
+            
+            ## 🔧 Technical Details
+            - **Min SDK:** 22 (Android 5.1)
+            - **Target SDK:** 34 (Android 14)
+            - **Architecture:** Universal (ARM + x86)
+            - **Size:** $(ls -lh ${{ steps.find_apk.outputs.debug_apk }} | awk '{print $5}')
+            
+            ---
+            *Built with ❤️ using GitHub Actions*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Summary
+        run: |
+          echo "==================================="
+          echo "🎉 Build Complete!"
+          echo "==================================="
+          echo "📱 APK Location: ${{ steps.find_apk.outputs.debug_apk }}"
+          echo "📦 Artifacts: Check the Artifacts section"
+          echo "📥 Download: Go to Actions > This Run > Artifacts"
+          echo "==================================="
